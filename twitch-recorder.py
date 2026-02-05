@@ -3,14 +3,13 @@ import enum
 import getopt
 import logging
 import os
+import shutil
 import subprocess
 import sys
-import shutil
 import time
 
-import requests
-
 import config
+import requests
 
 
 class TwitchResponseStatus(enum.Enum):
@@ -36,8 +35,13 @@ class TwitchRecorder:
         # twitch configuration
         self.client_id = config.client_id
         self.client_secret = config.client_secret
-        self.token_url = "https://id.twitch.tv/oauth2/token?client_id=" + self.client_id + "&client_secret=" \
-                         + self.client_secret + "&grant_type=client_credentials"
+        self.token_url = (
+            "https://id.twitch.tv/oauth2/token?client_id="
+            + self.client_id
+            + "&client_secret="
+            + self.client_secret
+            + "&grant_type=client_credentials"
+        )
         self.url = "https://api.twitch.tv/helix/streams"
         self.access_token = self.fetch_access_token()
 
@@ -67,18 +71,28 @@ class TwitchRecorder:
 
         # fix videos from previous recording session
         try:
-            video_list = [f for f in os.listdir(recorded_path) if os.path.isfile(os.path.join(recorded_path, f))]
+            video_list = [
+                f
+                for f in os.listdir(recorded_path)
+                if os.path.isfile(os.path.join(recorded_path, f))
+            ]
             if len(video_list) > 0:
                 logging.info("processing previously recorded files")
             for f in video_list:
                 recorded_filename = os.path.join(recorded_path, f)
-                processed_filename = os.path.join(processed_path, f)
-                self.process_recorded_file(recorded_filename, processed_filename)
+                processed_movie_filename = os.path.join(processed_path, "movie", f)
+                processed_audio_filename = os.path.join(processed_path, "audio", f)
+                self.process_recorded_file(recorded_filename, processed_movie_filename)
+                self.convertMp3(processed_audio_filename)
         except Exception as e:
             logging.error(e)
 
-        logging.info("checking for %s every %s seconds, recording with %s quality",
-                     self.username, self.refresh, self.quality)
+        logging.info(
+            "checking for %s every %s seconds, recording with %s quality",
+            self.username,
+            self.refresh,
+            self.quality,
+        )
         self.loop_check(recorded_path, processed_path)
 
     def process_recorded_file(self, recorded_filename, processed_filename):
@@ -92,9 +106,37 @@ class TwitchRecorder:
     def ffmpeg_copy_and_fix_errors(self, recorded_filename, processed_filename):
         try:
             subprocess.call(
-                [self.ffmpeg_path, "-err_detect", "ignore_err", "-i", recorded_filename, "-c", "copy",
-                 processed_filename])
+                [
+                    self.ffmpeg_path,
+                    "-err_detect",
+                    "ignore_err",
+                    "-i",
+                    recorded_filename,
+                    "-c",
+                    "copy",
+                    processed_filename,
+                ]
+            )
             os.remove(recorded_filename)
+        except Exception as e:
+            logging.error(e)
+
+    def convertMp3(self, movie_filename, audio_filename):
+        try:
+            subprocess.call(
+                [
+                    self.ffmpeg_path,
+                    "-err_detect",
+                    "ignore_err",
+                    "-i",
+                    movie_filename,
+                    "-q:a",
+                    "0",
+                    "-map",
+                    "a",
+                    audio_filename,
+                ]
+            )
         except Exception as e:
             logging.error(e)
 
@@ -102,8 +144,13 @@ class TwitchRecorder:
         info = None
         status = TwitchResponseStatus.ERROR
         try:
-            headers = {"Client-ID": self.client_id, "Authorization": "Bearer " + self.access_token}
-            r = requests.get(self.url + "?user_login=" + self.username, headers=headers, timeout=15)
+            headers = {
+                "Client-ID": self.client_id,
+                "Authorization": "Bearer " + self.access_token,
+            }
+            r = requests.get(
+                self.url + "?user_login=" + self.username, headers=headers, timeout=15
+            )
             r.raise_for_status()
             info = r.json()
             if info is None or not info["data"]:
@@ -125,11 +172,17 @@ class TwitchRecorder:
                 logging.error("username not found, invalid username or typo")
                 time.sleep(self.refresh)
             elif status == TwitchResponseStatus.ERROR:
-                logging.error("%s unexpected error. will try again in 5 minutes",
-                              datetime.datetime.now().strftime("%Hh%Mm%Ss"))
+                logging.error(
+                    "%s unexpected error. will try again in 5 minutes",
+                    datetime.datetime.now().strftime("%Hh%Mm%Ss"),
+                )
                 time.sleep(300)
             elif status == TwitchResponseStatus.OFFLINE:
-                logging.info("%s currently offline, checking again in %s seconds", self.username, self.refresh)
+                logging.info(
+                    "%s currently offline, checking again in %s seconds",
+                    self.username,
+                    self.refresh,
+                )
                 time.sleep(self.refresh)
             elif status == TwitchResponseStatus.UNAUTHORIZED:
                 logging.info("unauthorized, will attempt to log back in immediately")
@@ -139,19 +192,34 @@ class TwitchRecorder:
 
                 channels = info["data"]
                 channel = next(iter(channels), None)
-                filename = self.username + " - " + datetime.datetime.now() \
-                    .strftime("%Y-%m-%d %Hh%Mm%Ss") + " - " + channel.get("title") + ".mp4"
+                filename = (
+                    self.username
+                    + " - "
+                    + datetime.datetime.now().strftime("%Y-%m-%d %Hh%Mm%Ss")
+                    + " - "
+                    + channel.get("title")
+                    + ".mp4"
+                )
 
                 # clean filename from unnecessary characters
-                filename = "".join(x for x in filename if x.isalnum() or x in [" ", "-", "_", "."])
+                filename = "".join(
+                    x for x in filename if x.isalnum() or x in [" ", "-", "_", "."]
+                )
 
                 recorded_filename = os.path.join(recorded_path, filename)
                 processed_filename = os.path.join(processed_path, filename)
 
                 # start streamlink process
                 subprocess.call(
-                    ["streamlink", "--twitch-disable-ads", "twitch.tv/" + self.username, self.quality,
-                     "-o", recorded_filename])
+                    [
+                        "streamlink",
+                        "--twitch-disable-ads",
+                        "twitch.tv/" + self.username,
+                        self.quality,
+                        "-o",
+                        recorded_filename,
+                    ]
+                )
 
                 logging.info("recording stream is done, processing video file")
                 if os.path.exists(recorded_filename) is True:
@@ -170,7 +238,11 @@ def main(argv):
     logging.getLogger().addHandler(logging.StreamHandler())
 
     try:
-        opts, args = getopt.getopt(argv, "hu:q:l:", ["username=", "quality=", "log=", "logging=", "disable-ffmpeg"])
+        opts, args = getopt.getopt(
+            argv,
+            "hu:q:l:",
+            ["username=", "quality=", "log=", "logging=", "disable-ffmpeg"],
+        )
     except getopt.GetoptError:
         print(usage_message)
         sys.exit(2)
