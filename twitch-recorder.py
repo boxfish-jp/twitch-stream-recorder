@@ -56,14 +56,18 @@ class TwitchRecorder:
         recorded_path = os.path.join(self.root_path, "recorded", self.username)
         # path to finished video, errors removed
         processed_path = os.path.join(self.root_path, "processed", self.username)
+        processed_movie_path = os.path.join(processed_path, "movie")
+        processed_audio_path = os.path.join(processed_path, "audio")
 
         # create directory for recordedPath and processedPath if not exist
         if os.path.isdir(recorded_path) is False:
             os.makedirs(recorded_path)
         if os.path.isdir(processed_path) is False:
             os.makedirs(processed_path)
-            os.makedirs(os.path.join(processed_path, "movie"))
-            os.makedirs(os.path.join(processed_path, "audio"))
+        if os.path.isdir(processed_movie_path) is False:
+            os.makedirs(processed_movie_path)
+        if os.path.isdir(processed_audio_path) is False:
+            os.makedirs(processed_audio_path)
 
         # make sure the interval to check user availability is not less than 15 seconds
         if self.refresh < 15:
