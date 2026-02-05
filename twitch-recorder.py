@@ -202,9 +202,7 @@ class TwitchRecorder:
                 channels = info["data"]
                 channel = next(iter(channels), None)
                 filename = (
-                    self.username
-                    + " - "
-                    + datetime.datetime.now().strftime("%Y-%m-%d %Hh%Mm%Ss")
+                    datetime.datetime.now().strftime("%Y-%m-%d %Hh%Mm%Ss")
                     + " - "
                     + channel.get("title")
                 )
