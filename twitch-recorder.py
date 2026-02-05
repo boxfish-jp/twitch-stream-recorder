@@ -62,6 +62,8 @@ class TwitchRecorder:
             os.makedirs(recorded_path)
         if os.path.isdir(processed_path) is False:
             os.makedirs(processed_path)
+            os.makedirs(os.path.join(processed_path, "movie"))
+            os.makedirs(os.path.join(processed_path, "audio"))
 
         # make sure the interval to check user availability is not less than 15 seconds
         if self.refresh < 15:
@@ -81,7 +83,9 @@ class TwitchRecorder:
             for f in video_list:
                 recorded_filename = os.path.join(recorded_path, f)
                 processed_movie_filename = os.path.join(processed_path, "movie", f)
-                processed_audio_filename = os.path.join(processed_path, "audio", f.replace(".mp4", ".mp3"))
+                processed_audio_filename = os.path.join(
+                    processed_path, "audio", f.replace(".mp4", ".mp3")
+                )
                 self.process_recorded_file(recorded_filename, processed_movie_filename)
                 self.convertMp3(processed_movie_filename, processed_audio_filename)
         except Exception as e:
@@ -206,9 +210,13 @@ class TwitchRecorder:
                     x for x in filename if x.isalnum() or x in [" ", "-", "_", "."]
                 )
 
-                recorded_filename = os.path.join(recorded_path, filename+".mp4")
-                processed_movie_filename = os.path.join(processed_path, filename+".mp4")
-                processed_audio_filename = os.path.join(processed_path, filename+".mp3")
+                recorded_filename = os.path.join(recorded_path, filename + ".mp4")
+                processed_movie_filename = os.path.join(
+                    processed_path, filename + ".mp4"
+                )
+                processed_audio_filename = os.path.join(
+                    processed_path, filename + ".mp3"
+                )
 
                 # start streamlink process
                 subprocess.call(
@@ -224,10 +232,12 @@ class TwitchRecorder:
 
                 logging.info("recording stream is done, processing video file")
                 if os.path.exists(recorded_filename) is True:
-                    self.process_recorded_file(recorded_filename, processed_movie_filename)
+                    self.process_recorded_file(
+                        recorded_filename, processed_movie_filename
+                    )
                 else:
                     logging.info("skip fixing, file not found")
-                
+
                 if os.path.exists(processed_movie_filename) is True:
                     self.convertMp3(processed_movie_filename, processed_audio_filename)
                 else:
