@@ -4,13 +4,17 @@ import getopt
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
-
-import config
 import requests
 
+def _required_env(name):
+    value = os.environ.get(name)
+    if value is None:
+        raise SystemExit(f"missing required environment variable: {name}")
+    return value
 
 class TwitchResponseStatus(enum.Enum):
     ONLINE = 0
@@ -19,22 +23,21 @@ class TwitchResponseStatus(enum.Enum):
     UNAUTHORIZED = 3
     ERROR = 4
 
-
 class TwitchRecorder:
     def __init__(self):
         # global configuration
         self.ffmpeg_path = "ffmpeg"
         self.disable_ffmpeg = False
         self.refresh = 15
-        self.root_path = config.root_path
+        self.root_path = _required_env("TWITCH_ROOT_PATH")
 
         # user configuration
-        self.username = config.username
+        self.username = os.environ.get("TWITCH_USERNAME", "")
         self.quality = "best"
 
         # twitch configuration
-        self.client_id = config.client_id
-        self.client_secret = config.client_secret
+        self.client_id = _required_env("TWITCH_CLIENT_ID")
+        self.client_secret = _required_env("TWITCH_CLIENT_SECRET")
         self.token_url = (
             "https://id.twitch.tv/oauth2/token?client_id="
             + self.client_id
@@ -248,12 +251,17 @@ class TwitchRecorder:
                 logging.info("processing is done, going back to checking...")
                 time.sleep(self.refresh)
 
+def _handle_sigterm(signum, frame):
+    logging.info("received SIGTERM, shutting down")
+    sys.exit(0)
 
 def main(argv):
     twitch_recorder = TwitchRecorder()
     usage_message = "twitch-recorder.py -u <username> -q <quality>"
-    logging.basicConfig(filename="twitch-recorder.log", level=logging.INFO)
-    logging.getLogger().addHandler(logging.StreamHandler())
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
 
     try:
         opts, args = getopt.getopt(
@@ -276,11 +284,17 @@ def main(argv):
             logging_level = getattr(logging, arg.upper(), None)
             if not isinstance(logging_level, int):
                 raise ValueError("invalid log level: %s" % logging_level)
-            logging.basicConfig(level=logging_level)
+            logging.getLogger().setLevel(logging_level)
             logging.info("logging configured to %s", arg.upper())
         elif opt == "--disable-ffmpeg":
             twitch_recorder.disable_ffmpeg = True
             logging.info("ffmpeg disabled")
+
+    if not twitch_recorder.username:
+        print("username required: set TWITCH_USERNAME or use -u <username>")
+        sys.exit(2)
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
 
     twitch_recorder.run()
 
